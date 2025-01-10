@@ -206,9 +206,22 @@ int APIENTRY wWinMain (_In_     HINSTANCE hInstance,
   UNREFERENCED_PARAMETER (lpCmdLine);
   UNREFERENCED_PARAMETER (nCmdShow);
 
+  // Enforce a single instance of the application
+  HANDLE hStartEvent = CreateEventW (NULL, TRUE, FALSE, LR"(Local\NotifyIconPromote)");
+  if (GetLastError() == ERROR_ALREADY_EXISTS)
+  {
+    CloseHandle (hStartEvent);
+    hStartEvent = NULL;
+
+    return ERROR_NO_PROC_SLOTS;
+  }
+
   // Enable Efficiency Mode in Windows 11 (requires idle (low) priority + EcoQoS)
   SKIF_Util_SetProcessPowerThrottling (SKIF_Util_GetCurrentProcess ( ), 1);
-  SetPriorityClass (SKIF_Util_GetCurrentProcess ( ), IDLE_PRIORITY_CLASS );
+  SetPriorityClass  (SKIF_Util_GetCurrentProcess ( ), IDLE_PRIORITY_CLASS);
+
+  // Begin background processing mode
+  SetThreadPriority (GetCurrentThread ( ), THREAD_MODE_BACKGROUND_BEGIN);
 
   // Set up the registry watch
   SKIF_RegistryWatch regWatch (HKEY_CURRENT_USER, LR"(Control Panel\NotifyIconSettings)", L"NotifyIconSettingsNotify");
@@ -224,4 +237,9 @@ int APIENTRY wWinMain (_In_     HINSTANCE hInstance,
     else
       break; // Abort the execution if the wait event failed to be set up
   }
+
+  CloseHandle (hStartEvent);
+  hStartEvent = NULL;
+
+  return ERROR_SUCCESS;
 }
