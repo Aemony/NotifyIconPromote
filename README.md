@@ -2,11 +2,13 @@
 
 This is a background application that auto-promotes all newly registered and unconfigured notification icons to be visible by default in the Windows 11 notification area.
 
+This somewhat emulates the behavior of `Always show all icons and notifications on the taskbar` by default from prior Windows versions, but also allows for individual apps to be toggled.
+
 ## Notes
 
 * Only affects unconfigured applications; does not touch notification icons the user have already modified the behaviour of.
 * No performance impact to speak of as the code is using registry change notifications to only wake when a change is detected.
-* Automatically engages [Efficiency Mode](https://devblogs.microsoft.com/performance-diagnostics/reduce-process-interference-with-task-manager-efficiency-mode/) for itself.
+* Makes use of [Efficiency Mode](https://devblogs.microsoft.com/performance-diagnostics/reduce-process-interference-with-task-manager-efficiency-mode/) and thead background processing mode to further ensure the app never interferes with any foreground activity.
 
 ## Installation
 
