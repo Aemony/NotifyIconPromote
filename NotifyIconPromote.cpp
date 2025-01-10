@@ -229,17 +229,23 @@ int APIENTRY wWinMain (_In_     HINSTANCE hInstance,
   // A one-time initial run to promote any unconfigured notification icon to be visible
   PromoteNotificationIcons ( );
 
-  // Enter the loop where we just watch for registry changes...
+  DWORD exitCode = ERROR_SUCCESS;
+
+  // Enter the loop where we just wait for registry changes...
   while (true)
   {
     if (regWatch.isSignaled ( ))
       PromoteNotificationIcons ( );
-    else
-      break; // Abort the execution if the wait event failed to be set up
+
+    // Abort the execution if the wait event failed to be set up
+    else {
+      exitCode = ERROR_INVALID_HANDLE;
+      break;
+    }
   }
 
   CloseHandle (hStartEvent);
   hStartEvent = NULL;
 
-  return ERROR_SUCCESS;
+  return exitCode;
 }
