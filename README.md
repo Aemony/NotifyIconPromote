@@ -8,7 +8,7 @@ This somewhat emulates the behavior of `Always show all icons and notifications 
 
 * Only affects unconfigured applications; does not touch notification icons the user have already modified the behaviour of.
 * No performance impact to speak of as the code is using registry change notifications to only wake when a change is detected.
-* Makes use of [Efficiency Mode](https://devblogs.microsoft.com/performance-diagnostics/reduce-process-interference-with-task-manager-efficiency-mode/) and thead background processing mode to further ensure the app never interferes with any foreground activity.
+* Makes use of [Efficiency Mode](https://devblogs.microsoft.com/performance-diagnostics/reduce-process-interference-with-task-manager-efficiency-mode/) and thread background processing mode to further ensure the app never interferes with any foreground activity.
 
 ## Installation
 
