@@ -2,7 +2,7 @@
 
 This is a background application that auto-promotes all newly registered and unconfigured notification icons to be visible by default in the Windows 11 notification area.
 
-This somewhat emulates the behavior of `Always show all icons and notifications on the taskbar` by default from prior Windows versions, but also allows for individual apps to be toggled.
+This somewhat emulates the behavior of `Always show all icons and notifications on the taskbar` from prior Windows versions, but also allows for individual apps to be toggled if so desired.
 
 ## Notes
 
