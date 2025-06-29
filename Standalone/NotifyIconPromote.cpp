@@ -5,8 +5,6 @@
 #include <wtypes.h>
 #include <stdlib.h>
 
-
-
 // Registry Watch
 struct SKIF_RegistryWatch {
    SKIF_RegistryWatch (HKEY hRootKey,
@@ -210,8 +208,11 @@ int APIENTRY wWinMain (_In_     HINSTANCE hInstance,
   HANDLE hStartEvent = CreateEventW (NULL, TRUE, FALSE, LR"(Local\NotifyIconPromote)");
   if (GetLastError() == ERROR_ALREADY_EXISTS)
   {
-    CloseHandle (hStartEvent);
-    hStartEvent = NULL;
+    if (hStartEvent != NULL)
+    {
+      CloseHandle (hStartEvent);
+      hStartEvent = NULL;
+    }
 
     return ERROR_NO_PROC_SLOTS;
   }
@@ -222,6 +223,8 @@ int APIENTRY wWinMain (_In_     HINSTANCE hInstance,
 
   // Begin background processing mode
   SetThreadPriority (GetCurrentThread ( ), THREAD_MODE_BACKGROUND_BEGIN);
+
+  // This will fail on older versions of Windows 11 which does not have nor use the HKCU\Control Panel\NotifyIconSettings registry key!
 
   // Set up the registry watch
   SKIF_RegistryWatch regWatch (HKEY_CURRENT_USER, LR"(Control Panel\NotifyIconSettings)", L"NotifyIconSettingsNotify");
@@ -244,8 +247,11 @@ int APIENTRY wWinMain (_In_     HINSTANCE hInstance,
     }
   }
 
-  CloseHandle (hStartEvent);
-  hStartEvent = NULL;
+  if (hStartEvent != NULL)
+  {
+    CloseHandle (hStartEvent);
+    hStartEvent = NULL;
+  }
 
   return exitCode;
 }
