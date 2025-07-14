@@ -29,6 +29,8 @@ HANDLE                ghSvcStopEvent   = NULL;
 HANDLE                ghSvcPauseEvent  = NULL;
 HANDLE                ghSvcResumeEvent = NULL;
 std::vector<HANDLE>   gvhEvents;
+HKEY                  ghkHKCUUserState = NULL;
+bool                  gbUserState      = true;
 
 VOID WINAPI SvcCtrlHandler   (DWORD dwCtrl);
 VOID WINAPI SvcMain          (DWORD dwArgc, LPTSTR* lpszArgv);
@@ -57,7 +59,7 @@ struct RegistryWatch {
 
   struct {
     HKEY         root = { };
-    wchar_t* sub_key;
+    wchar_t*     sub_key;
     BOOL         watch_subtree;
     DWORD        filter_mask;
     BOOL         wow64_32key; // Access a 32-bit key from either a 32-bit or 64-bit application.
@@ -121,6 +123,10 @@ RegistryWatch::reset (void)
     _hEvent = NULL;
   }
 }
+
+
+
+
 
 // Returns the current time
 DWORD
@@ -271,17 +277,22 @@ Util_ReportEvent (LPCTSTR szFunction, WORD wType, LPCTSTR szMessage, LPCTSTR szD
   if( NULL != hEventSource )
   {
     if (wType == EVENTLOG_ERROR_TYPE)
-      StringCchPrintf (Buffer, 80, TEXT("%s failed: %s%s\nLast-Error Code: %d"), szFunction, szMessage, szDetails, GetLastError ( ));
+      StringCchPrintf (Buffer, 256, TEXT("%s failed: %s%s\nLast-Error Code: %d"), szFunction, szMessage, szDetails, GetLastError ( ));
     else
-      StringCchPrintf (Buffer, 80, TEXT("%s: %s%s"), szFunction, szMessage, szDetails);
+      StringCchPrintf (Buffer, 256, TEXT("%s: %s%s"), szFunction, szMessage, szDetails);
 
     lpszStrings[0] = Buffer;
   //lpszStrings[1] = SVCNAME;
 
+    DWORD dwEventID = (wType == EVENTLOG_ERROR_TYPE)       ? 1 : // Error
+                      (wType == EVENTLOG_INFORMATION_TYPE) ? 0 : // Information
+                                                             0 ; // Success
+
+
     ReportEvent (hEventSource,        // event log handle
                   wType,              // event type
                   0,                  // event category
-                  0,                  // event identifier
+                  dwEventID,                  // event identifier
                   NULL,               // no security identifier
                   1,                  // size of lpszStrings array
                   0,                  // no binary data
@@ -296,6 +307,10 @@ Util_ReportEvent (LPCTSTR szFunction, WORD wType, LPCTSTR szMessage, LPCTSTR szD
 static void
 PromoteNotificationIcons (void)
 {
+  // Do nothing if the user setting is disabled.
+  if (! gbUserState)
+    return;
+
   // Constants
   static const DWORD dwIsPromoted = 1;
 
@@ -336,6 +351,63 @@ PromoteNotificationIcons (void)
   }
 }
 
+static bool
+SetUserSetting (bool state)
+{
+  LSTATUS lStat = RegSetValueEx (ghkHKCUUserState, L"Enabled", 0, REG_BINARY, (PBYTE)&state, sizeof (bool));
+  if (ERROR_SUCCESS == lStat)
+  {
+    if (state)
+      Util_ReportEvent (TEXT("SetUserSetting"), EVENTLOG_SUCCESS, L"Enabled automatic icon promotion.");
+    else
+      Util_ReportEvent (TEXT("SetUserSetting"), EVENTLOG_SUCCESS, L"Disabled automatic icon promotion.");
+
+    gbUserState = state;
+  }
+
+  else
+  {
+    LPWSTR messageBuffer = nullptr;
+
+    size_t size = FormatMessage (FORMAT_MESSAGE_ALLOCATE_BUFFER |
+                                 FORMAT_MESSAGE_FROM_SYSTEM     |
+                                 FORMAT_MESSAGE_IGNORE_INSERTS,
+                                 NULL, lStat, MAKELANGID(LANG_NEUTRAL, SUBLANG_DEFAULT), (LPWSTR)&messageBuffer, 0, NULL);
+
+    Util_ReportEvent (TEXT("SetUserSetting"), EVENTLOG_ERROR_TYPE, L"Setting the registry state failed:", messageBuffer);
+
+    LocalFree (messageBuffer);
+  }
+
+  return state;
+}
+
+static bool
+GetUserSetting (void)
+{
+  DWORD  dwSize = sizeof (bool);
+  LSTATUS lStat = RegGetValue (ghkHKCUUserState, NULL, L"Enabled", RRF_RT_REG_BINARY, NULL, &gbUserState, &dwSize);
+
+  if (lStat == ERROR_SUCCESS)
+    return gbUserState;
+
+  if (lStat == ERROR_FILE_NOT_FOUND)
+    return (SetUserSetting (gbUserState));
+
+  return false;
+}
+
+static void
+InitUserSetting (void)
+{
+  // I remembered that some users on a shared system might actually want this behavior... Whoops!
+  // Let us use a HKCU registry value to control the behavior of the service.
+  
+  // Create/open the user-specific registry subkey and retrieve/set the registry value
+  if (ERROR_SUCCESS == RegCreateKeyEx (HKEY_CURRENT_USER, LR"(SOFTWARE\Notification Icon Promoter)", 0, NULL, NULL, (KEY_NOTIFY | KEY_QUERY_VALUE | KEY_SET_VALUE), NULL, &ghkHKCUUserState, NULL))
+    GetUserSetting ( );
+}
+
 
 //
 // Purpose:
@@ -350,9 +422,7 @@ PromoteNotificationIcons (void)
 int __cdecl _tmain (int argc, TCHAR* argv[])
 {
   SERVICE_TABLE_ENTRY DispatchTable[] =
-  {
-    { SVCNAME, (LPSERVICE_MAIN_FUNCTION) SvcMain}
-  };
+  { { SVCNAME, (LPSERVICE_MAIN_FUNCTION) SvcMain } };
 
   // This call returns when the service has stopped.
   // The process should simply terminate when the call returns.
@@ -360,9 +430,14 @@ int __cdecl _tmain (int argc, TCHAR* argv[])
   {
     // Do nothing since we have already run as a service.
   }
+
   else if (GetLastError ( ) == ERROR_FAILED_SERVICE_CONTROLLER_CONNECT)
   {
     // We are actually running as a console application.
+
+    // Create/open the per-user key
+    InitUserSetting ( );
+     
     //   Do a one-time adjustment, and check the service status!
     PromoteNotificationIcons ( );
 
@@ -372,51 +447,72 @@ int __cdecl _tmain (int argc, TCHAR* argv[])
     // 1 - Not installed or running (default)
     // 0 - Unknown error
 
-    switch (GetSvcStatus ( ))
+    int iStatus = GetSvcStatus ( );
+
+    if (iStatus == 4) // Installed and running
     {
-      case 4: // Installed and running
-        std::cout << "The background service is installed and running." << std::endl;
-        //MessageBox (NULL, L"The background service is installed and running.", L"Notification Icon Promoter", MB_OK | MB_ICONINFORMATION);
-        
-        break;
-      case 3: // Installed but not running (not currently used)
-        std::cout << "The background service is installed but not running." << std::endl;
-        std::cout << "    Restart the computer to start it up again.      " << std::endl;
-        //MessageBox (NULL, L"The background service is installed but stopped.", L"Notification Icon Promoter", MB_OK | MB_ICONINFORMATION);
-        break;
+      std::cout << "The background service is installed and running." << std::endl;
 
-      case 2: // Installed, but unknown status
-        std::cout << "The background service is installed but not running." << std::endl;
-        std::cout << "    Restart the computer to start it up again.      " << std::endl;
-        //MessageBox (NULL, L"The background service is installed but stopped.\nPlease restart the computer.", L"Notification Icon Promoter", MB_OK | MB_ICONINFORMATION);
-        break;
+      int choice = 0;
 
-      case 1: // Not installed or running (default)
-        std::cout << "The background service is not installed." << std::endl;
-        std::cout << "Please (re)run the setup to install it. " << std::endl;
-        //MessageBox (NULL, L"The background service is not installed.\nPlease run the setup to install it.", L"Notification Icon Promoter", MB_OK | MB_ICONINFORMATION);
-        break;
+      if (gbUserState)
+        choice = MessageBox (NULL, L"Automatic icon promotion is ENABLED and active.\nDo you want to DEACTIVATE the functionality?", L"Notification Icon Promoter", MB_YESNOCANCEL | MB_ICONQUESTION);
+      else
+        choice = MessageBox (NULL, L"Automatic icon promotion is DISABLED and inactive.\nDo you want to ACTIVATE the functionality?", L"Notification Icon Promoter", MB_YESNOCANCEL | MB_ICONQUESTION);
 
-      case 0: // Unknown error
-        Util_ReportEvent (TEXT("GetSvcStatus"), EVENTLOG_ERROR_TYPE);
-        std::cout << "An unexpected error occur when trying to check the service status." << std::endl;
-        //MessageBox (NULL, L"An unexpected error occur when trying to check the service status.", L"Notification Icon Promoter", MB_OK | MB_ICONINFORMATION);
-        break;
-
-      default:
-        Util_ReportEvent (TEXT("GetSvcStatus"), EVENTLOG_ERROR_TYPE, L"Catastrophic error?! This should never occur!");
-        std::cout << "Catastrophic error?! This should never occur!" << std::endl;
-        //MessageBox (NULL, L"Catastrophic error?! This should never occur!", L"Notification Icon Promoter", MB_OK | MB_ICONINFORMATION);
+      if (choice == IDYES)
+      {
+        if (SetUserSetting (! gbUserState))
+          MessageBox (NULL, L"Automatic icon promotion is now ENABLED.", L"Notification Icon Promoter", MB_OK | MB_ICONINFORMATION);
+        else
+          MessageBox (NULL, L"Automatic icon promotion is now DISABLED.", L"Notification Icon Promoter", MB_OK | MB_ICONINFORMATION);
+      }
     }
 
-    std::cout << std::endl;
-    std::cout << "Press Enter to close the window." << std::endl;
-    std::cin.get();
+    else if (iStatus == 3) // Installed but not running (not currently used)
+    {
+      std::cout << "The background service is installed but not running." << std::endl;
+      std::cout << "    Restart the computer to start it up again.      " << std::endl;
+    }
+
+    else if (iStatus == 2) // Installed, but unknown status
+    {
+      std::cout << "The background service is installed but not running." << std::endl;
+      std::cout << "    Restart the computer to start it up again.      " << std::endl;
+    }
+
+    else if (iStatus == 1) // Not installed or running (default)
+    {
+      std::cout << "The background service is not installed." << std::endl;
+      std::cout << "Please (re)run the setup to install it. " << std::endl;
+    }
+
+    else if (iStatus == 0) // Unknown error
+    {
+      Util_ReportEvent (TEXT("GetSvcStatus"), EVENTLOG_ERROR_TYPE);
+      std::cout << "An unexpected error occur when trying to check the service status." << std::endl;
+    }
+
+    else // Unknown error
+    {
+      Util_ReportEvent (TEXT("GetSvcStatus"), EVENTLOG_ERROR_TYPE, L"Catastrophic error?! This should never occur!");
+      std::cout << "Catastrophic error?! This should never occur!" << std::endl;
+    }
+
+    if (iStatus != 4)
+    {
+      std::cout << std::endl;
+      std::cout << "Press Enter to close the window." << std::endl;
+      std::cin.get();
+    }
 
   } else {
     // An unexpected error occurred when trying to start as a service?
     Util_ReportEvent (TEXT("StartServiceCtrlDispatcher"), EVENTLOG_ERROR_TYPE);
   }
+
+  // We can now close the user-specific registry subkey as well
+  RegCloseKey (ghkHKCUUserState);
 
   return 0;
 }
@@ -526,8 +622,14 @@ static VOID SvcInit (VOID)
   }
   RegCloseKey (hkSubkey);
 
-  // Set up the registry watch
-  RegistryWatch regWatch (HKEY_CURRENT_USER, LR"(Control Panel\NotifyIconSettings)", L"NotifyIconSettingsNotify");
+  // Create/open the per-user key
+  InitUserSetting ( );
+
+  // Set up the registry watch for the notification icons
+  RegistryWatch rwNotifyIcons (HKEY_CURRENT_USER, LR"(Control Panel\NotifyIconSettings)", L"NIPNotifyIconSettingsNotify");
+
+  // Set up the registry watch for the user setting
+  RegistryWatch rwUserSetting (HKEY_CURRENT_USER, LR"(SOFTWARE\Notification Icon Promoter)", L"NIPUserSettingsNotify");
 
   // Enable Efficiency Mode in Windows 11 (requires idle (low) priority + EcoQoS)
   Util_SetProcessPowerThrottling (Util_GetCurrentProcess ( ), 1);
@@ -537,16 +639,21 @@ static VOID SvcInit (VOID)
   SetThreadPriority              (GetCurrentThread ( ),       THREAD_MODE_BACKGROUND_BEGIN);
 
   // If the registry watch could be set up properly
-  if (regWatch._hEvent != NULL)
+  if (rwNotifyIcons._hEvent != NULL)
   {
-    gvhEvents.push_back (regWatch._hEvent); // WAIT_OBJECT_0 + 0
-    gvhEvents.push_back (ghSvcStopEvent);   // WAIT_OBJECT_0 + 1
-    gvhEvents.push_back (ghSvcPauseEvent);  // WAIT_OBJECT_0 + 2
-  //gvhEvents.push_back (ghSvcResumeEvent); // Not used in this way
+    gvhEvents.push_back (rwNotifyIcons._hEvent); // WAIT_OBJECT_0 + 0
+    gvhEvents.push_back (ghSvcStopEvent);        // WAIT_OBJECT_0 + 1
+    gvhEvents.push_back (ghSvcPauseEvent);       // WAIT_OBJECT_0 + 2
+    gvhEvents.push_back (rwUserSetting._hEvent); // WAIT_OBJECT_0 + 3
+  //gvhEvents.push_back (ghSvcResumeEvent);      // Not used in this way
    
     // Report running status when initialization is complete.
     ReportSvcStatus  (SERVICE_RUNNING, NO_ERROR, 0);
-    Util_ReportEvent (TEXT("SvcInit"), EVENTLOG_SUCCESS, TEXT("The Notification Icon Promoter Service started."));
+
+    if (gbUserState)
+      Util_ReportEvent (TEXT("SvcInit"), EVENTLOG_SUCCESS, TEXT("The Notification Icon Promoter Service started."));
+    else
+      Util_ReportEvent (TEXT("SvcInit"), EVENTLOG_SUCCESS, TEXT("The Notification Icon Promoter Service started, although automatic promotion is disabled per the user-specific registry value."));
 
     // A one-time initial run to promote any unconfigured notification icon to be visible
     PromoteNotificationIcons ( );
@@ -558,28 +665,37 @@ static VOID SvcInit (VOID)
       {
         case WAIT_OBJECT_0 + 0: // Registry event was signaled
           PromoteNotificationIcons ( );
-          regWatch.reset ( );
+          rwNotifyIcons.reset ( );
           break;
 
         case WAIT_OBJECT_0 + 1: // Stop event was signaled
           ReportSvcStatus     (SERVICE_STOPPED, NO_ERROR, 0);
-          Util_ReportEvent    (TEXT("SvcInit"), EVENTLOG_SUCCESS, TEXT("The Notification Icon Promoter Service stopped."));
+          Util_ReportEvent    (TEXT("SvcInit"), EVENTLOG_INFORMATION_TYPE, TEXT("The Notification Icon Promoter Service stopped."));
           abort = true;
           break;
 
         case WAIT_OBJECT_0 + 2: // Pause event was signaled
           ReportSvcStatus     (SERVICE_PAUSED, NO_ERROR, 0);
-          Util_ReportEvent    (TEXT("SvcInit"), EVENTLOG_SUCCESS, TEXT("The Notification Icon Promoter Service paused."));
+          Util_ReportEvent    (TEXT("SvcInit"), EVENTLOG_INFORMATION_TYPE, TEXT("The Notification Icon Promoter Service paused."));
 
           // Wait on the resume event until it has been signaled
           ResetEvent          (ghSvcResumeEvent);
           WaitForSingleObject (ghSvcResumeEvent, INFINITE);
 
           ReportSvcStatus     (SERVICE_RUNNING, NO_ERROR, 0);
-          Util_ReportEvent    (TEXT("SvcInit"), EVENTLOG_SUCCESS, TEXT("The Notification Icon Promoter Service resumed."));
+          Util_ReportEvent    (TEXT("SvcInit"), EVENTLOG_INFORMATION_TYPE, TEXT("The Notification Icon Promoter Service resumed."));
 
           // Reset the pause event
           ResetEvent          (ghSvcPauseEvent);
+          break;
+
+        case WAIT_OBJECT_0 + 3: // User-specific setting was changed, update our internal state!
+          GetUserSetting ( );
+          if (gbUserState)
+            Util_ReportEvent  (TEXT("SvcInit"), EVENTLOG_SUCCESS, TEXT("The Notification Icon Promoter Service enabled automatic promotion."));
+          else
+            Util_ReportEvent  (TEXT("SvcInit"), EVENTLOG_SUCCESS, TEXT("The Notification Icon Promoter Service disabled automatic promotion per the user-specific registry value."));
+          rwUserSetting.reset();
           break;
 
         case WAIT_TIMEOUT:      // Timed out when waiting on the objects
