@@ -1,4 +1,4 @@
-# NotifyIconPromote
+# Notification Icon Promoter
 
 This is a Windows service/standalone tool that auto-promotes all newly registered and unconfigured notification icons to be visible by default in the Windows 11 notification area. This somewhat emulates the behavior of `Always show all icons and notifications on the taskbar` from prior Windows versions, but also allows for individual apps to be toggled if so desired (through the Settings app in Windows).
 
@@ -32,8 +32,7 @@ The tool is provided in two forms: as a [per-user service](https://learn.microso
    * This is required to start up the per-user service that the installer created.
 4. Note the following:
    * The service runs hidden in the background with no visual indicators.
-   * It can be controlled through `services.msc` -> `Notification Icon Promoter`, although this affects all users on the system.
-   * Run the application manually to perform a one-time promotion of any new icons.
+   * Run the `Notification Icon Promoter` app to enable/disable the automatic promotion of new icons.
      * Note that any existing icons must be controlled through Windows:
          Settings -> Personalization -> Taskbar -> Other system tray icons
 
