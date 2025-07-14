@@ -33,7 +33,7 @@ DisableProgramGroupPage         = yes
 LicenseFile                     = D:\Development\NotifyIconPromote\Installer\license.txt
 ; Uncomment the following line to run in non administrative install mode (install for current user only).
 ;PrivilegesRequired             = lowest
-OutputBaseFilename              = NotifyIconPromoteSetup
+OutputBaseFilename              = NotifyIconPromote_Setup
 SolidCompression                = yes
 WizardStyle                     = modern
 AlwaysRestart                   = yes
