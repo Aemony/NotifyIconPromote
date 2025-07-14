@@ -14,7 +14,7 @@ Note that the app requires a somewhat newer version of Windows 11, and *does not
 
 The tool is provided in two forms: as a [per-user service](https://learn.microsoft.com/en-us/windows/application-management/per-user-services-in-windows) and as a standalone executable.
 
-* The service solution supports shared machines as the tool is installed as a per-user service that starts alongside Windows for all current and future users and is the recommended solution. This however requires administrative privileges to install. Note that the behavior cannot currently be controlled on a per-user basis... If the Windows service is disabled for one user it is disable for all users of the system.
+* The service solution supports shared machines as the tool is installed as a per-user service that starts alongside Windows for all current and future users and is the recommended solution. This however requires administrative privileges to install. Users can control the behavior through the `Notification Icon Promoter` app in their start menu.
 
 * The standalone executable is the original legacy solution that consists of an extremely tiny executable with no visual or user-facing parts. This is currently *not* provided through an installer, and the user have to manually configure it to auto-start alongside Windows and setting it up for any new users on the system.
 
