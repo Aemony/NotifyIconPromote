@@ -462,13 +462,15 @@ int __cdecl _tmain (int argc, TCHAR* argv[])
 
       if (choice == IDYES)
       {
-        if (SetUserSetting (! gbUserState))
-          MessageBox (NULL, L"Automatic icon promotion is now ENABLED.", L"Notification Icon Promoter", MB_OK | MB_ICONINFORMATION);
-        else
-          MessageBox (NULL, L"Automatic icon promotion is now DISABLED.", L"Notification Icon Promoter", MB_OK | MB_ICONINFORMATION);
+        bool newState = SetUserSetting (! gbUserState);
 
         // Do another one-time adjustment
         PromoteNotificationIcons ( );
+
+        if (newState)
+          MessageBox (NULL, L"Automatic icon promotion is now ENABLED.", L"Notification Icon Promoter", MB_OK | MB_ICONINFORMATION);
+        else
+          MessageBox (NULL, L"Automatic icon promotion is now DISABLED.", L"Notification Icon Promoter", MB_OK | MB_ICONWARNING);
       }
     }
 
