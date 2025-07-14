@@ -2,7 +2,7 @@
 ; SEE THE DOCUMENTATION FOR DETAILS ON CREATING INNO SETUP SCRIPT FILES!
 
 #define MyAppName      "Notification Icon Promoter"
-#define MyAppVersion   "1.5"
+#define MyAppVersion   "1.6"
 #define MyAppPublisher "Aemony"
 #define MyAppURL       "https://github.com/Aemony/NotifyIconPromote"
 #define MyAppExeName   "NotifyIconPromoteSvc.exe"

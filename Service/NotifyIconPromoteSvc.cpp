@@ -437,8 +437,8 @@ int __cdecl _tmain (int argc, TCHAR* argv[])
 
     // Create/open the per-user key
     InitUserSetting ( );
-     
-    //   Do a one-time adjustment, and check the service status!
+
+    // Do a one-time adjustment
     PromoteNotificationIcons ( );
 
     // 4 - Installed and running
@@ -466,6 +466,9 @@ int __cdecl _tmain (int argc, TCHAR* argv[])
           MessageBox (NULL, L"Automatic icon promotion is now ENABLED.", L"Notification Icon Promoter", MB_OK | MB_ICONINFORMATION);
         else
           MessageBox (NULL, L"Automatic icon promotion is now DISABLED.", L"Notification Icon Promoter", MB_OK | MB_ICONINFORMATION);
+
+        // Do another one-time adjustment
+        PromoteNotificationIcons ( );
       }
     }
 
