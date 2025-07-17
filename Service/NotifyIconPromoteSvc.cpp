@@ -19,6 +19,7 @@
 #pragma comment(lib, "advapi32.lib")
 #pragma comment(lib, "Secur32.lib")
 #pragma comment(lib, "Winmm.lib")
+#pragma comment(lib, "User32.lib")
 
 wchar_t SVCNAME[]  = L"NotifyIconPromote";  //     Base Service Name: NotifyIconPromote
 wchar_t SVCNAME_[] = L"NotifyIconPromote_"; // Per-User Service Name: NotifyIconPromote_<LUID>
